@@ -26,11 +26,14 @@ mcporter call 'exa.web_search_exa(query: "major news today", numResults: 5)'
 ```
 - 3-4 条今日要闻
 
-### 4. 费用报告
+### 4. 费用报告 (所有模型)
 ```bash
-# MiniMax Coding Plan £5/月固定，无需追踪
-echo "💰 MiniMax: £5/月 (固定不限量)"
+# 获取昨日费用（MiniMax £5/月 + Gemini 实际消耗）
+python3 ~/.openclaw/skills/gemini-cost-tracker/scripts/extract-cost.py --yesterday
 ```
+- MiniMax: £5/月固定（无限量）
+- 其他模型: 实际 API 消耗（USD）
+- 展示格式：💰 MiniMax £5 + Gemini $X.XX
 
 ### 5. 当日星盘 (Mingli)
 ```bash
@@ -67,7 +70,8 @@ echo "💰 MiniMax: £5/月 (固定不限量)"
 - 🧘 运动：瑜伽垫 or VR
 
 ### 💰 费用
-- MiniMax: £5/月 (固定)
+- MiniMax: £5/月 (固定不限量)
+- Gemini + 其他: $X.XX USD (实际消耗)
 
 ### 🔮 当日运势
 - 星座运势简述
