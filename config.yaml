@@ -1,0 +1,49 @@
+# Telegram Expense Bot Configuration
+
+bot:
+  # 从 @BotFather 获取 Token
+  token: "YOUR_BOT_TOKEN_HERE"
+  
+  # 可选：管理员 ID（数字形式）
+  admin_id: null
+  
+  # Bot 用户名（可选）
+  username: "expense_bot"
+
+database:
+  # SQLite 数据库路径
+  path: "data/expenses.db"
+  
+  # 是否启用 WAL 模式（提升并发性能）
+  wal_mode: true
+
+categories:
+  # 支出分类
+  expense:
+    - 餐饮
+    - 交通
+    - 购物
+    - 娱乐
+    - 医疗
+    - 住房
+    - 教育
+    - 其他
+  
+  # 收入分类
+  income:
+    - 工资
+    - 兼职
+    - 投资
+    - 礼物
+    - 其他
+
+# 消息文本配置
+messages:
+  welcome: "欢迎使用记账机器人！🎉\n\n使用 /add 记录开支，/balance 查看统计"
+  help: "可用命令：\n/start - 启动\n/add - 记一笔\n/balance - 月度统计\n/history - 历史记录\n/category - 分类管理"
+  add_success: "✅ 记录成功！"
+  add_format: "请按格式输入：金额 分类 备注\n例如：50 餐饮 午餐"
+
+# 日期格式
+date_format: "%Y-%m-%d"
+timezone: "UTC"
