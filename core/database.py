@@ -215,7 +215,7 @@ class Database:
         with self._get_connection() as conn:
             query = """
                 SELECT t.id, t.amount, t.type, t.category_id, c.name as category_name,
-                       c.emoji as category_emoji, t.description, t.date
+                       c.emoji as category_emoji, t.description, t.date, t.created_at
                 FROM transactions t
                 JOIN categories c ON t.category_id = c.id
                 WHERE 1=1
@@ -253,12 +253,20 @@ class Database:
                 
                 # Parse date handling potential string from SQLite
                 date_val = row["date"]
+                created_at_val = row.get("created_at") or datetime.now()
+                
                 if isinstance(date_val, str):
                     try:
                         date_val = datetime.fromisoformat(date_val)
                     except ValueError:
                         # Fallback for simple date strings
                         date_val = datetime.strptime(date_val.split('.')[0], "%Y-%m-%d %H:%M:%S")
+                
+                if isinstance(created_at_val, str):
+                    try:
+                        created_at_val = datetime.fromisoformat(created_at_val)
+                    except ValueError:
+                        created_at_val = datetime.strptime(created_at_val.split('.')[0], "%Y-%m-%d %H:%M:%S")
 
                 transactions.append(Transaction(
                     id=row["id"],
@@ -268,6 +276,7 @@ class Database:
                     category_name=f"{row['category_emoji']} {row['category_name']}",
                     description=row["description"] or "",
                     date=date_val,
+                    created_at=created_at_val,
                     tags=tags
                 ))
             
