@@ -2,7 +2,7 @@
 Main entry point for the Telegram Expense Bot.
 
 Usage:
-    python -m bot.main
+    python3 -m bot.main
 """
 
 import os
