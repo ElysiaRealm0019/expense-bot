@@ -47,6 +47,26 @@ async def post_init(application: Application):
     logging.info("Expense Bot started successfully!")
 
 
+class UserAuthMixin:
+    """Mixin to add user authentication."""
+    
+    @staticmethod
+    async def auth_check(update, context):
+        """Check if user is allowed to use the bot."""
+        config = context.application.bot_data.get("config", {})
+        allowed_users = config.get("security", {}).get("allowed_users", [])
+        
+        # If no whitelist configured, allow all
+        if not allowed_users:
+            return
+        
+        user_id = update.effective_user.id
+        if user_id not in allowed_users:
+            await update.message.reply_text("⛔ 您没有权限使用此机器人。")
+            return False
+        return True
+
+
 def main():
     """Main function to run the bot."""
     setup_logging()
@@ -65,6 +85,9 @@ def main():
         .post_init(post_init)
         .build()
     )
+    
+    # Store config for auth check
+    application.bot_data["config"] = config
     
     # Set up handlers
     setup_handlers(application)

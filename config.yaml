@@ -44,3 +44,10 @@ categories:
     - 奖金
     - 投资
     - 其他收入
+
+# 安全设置
+security:
+  # 允许使用机器人的用户ID列表
+  # 留空则允许所有人使用
+  # 示例: allowed_users: [123456789, 987654321]
+  allowed_users: []

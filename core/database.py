@@ -201,6 +201,11 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def get_category_name(self, category_id: int) -> str:
+        """根据ID获取分类名称"""
+        category = self.get_category_by_id(category_id)
+        return category["name"] if category else "未知分类"
+
     # ========== 标签操作 ==========
 
     def add_tag(self, name: str) -> int:

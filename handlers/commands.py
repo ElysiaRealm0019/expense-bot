@@ -50,6 +50,13 @@ class CommandHandlers:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理 /start 命令"""
+        # 检查用户权限
+        user_id = update.effective_user.id
+        allowed_users = context.bot_data.get("config", {}).get("security", {}).get("allowed_users", [])
+        if allowed_users and user_id not in allowed_users:
+            await update.message.reply_text("⛔ 您没有权限使用此机器人。")
+            return
+        
         user = update.effective_user
         welcome_text = f"""
 🎉 欢迎使用记账机器人！
@@ -237,6 +244,9 @@ class CommandHandlers:
             await update.message.reply_text("记录失败，请重试 /add")
             return ConversationHandler.END
 
+        # 获取分类名称
+        category_name = self.db.get_category_name(category_id)
+        
         self.db.add_transaction(
             amount=amount,
             type_=type_,
@@ -248,7 +258,8 @@ class CommandHandlers:
         await update.message.reply_text(
             f"✅ 记录已保存！\n\n"
             f"{icon} {format_amount(amount, self.currency)}\n"
-            f"📂 分类：{description}"
+            f"📂 分类：{category_name}"
+            + (f"\n📝 备注：{description}" if description else "")
         )
 
         # 清理用户数据
