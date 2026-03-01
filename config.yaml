@@ -1,49 +1,46 @@
-# Telegram Expense Bot Configuration
+# Telegram Expense Bot 配置文件
+# 请复制此文件为 config.yaml 并填入实际值
 
+# Bot 配置
 bot:
-  # 从 @BotFather 获取 Token
+  # 从 @BotFather 获取的 Telegram Bot Token
   token: "YOUR_BOT_TOKEN_HERE"
-  
-  # 可选：管理员 ID（数字形式）
-  admin_id: null
-  
-  # Bot 用户名（可选）
-  username: "expense_bot"
+  # Bot 名称（可选）
+  name: "expense_bot"
 
+# 数据库配置
 database:
-  # SQLite 数据库路径
+  # SQLite 数据库路径（会自动创建）
   path: "data/expenses.db"
-  
-  # 是否启用 WAL 模式（提升并发性能）
-  wal_mode: true
 
+# 货币设置
+currency:
+  # 显示的货币符号
+  symbol: "£"
+  # 货币名称
+  name: "GBP"
+
+# 设置
+settings:
+  # 历史记录显示数量上限
+  max_history: 50
+  # 默认时区
+  timezone: "Europe/London"
+
+# 允许的分类（用户只能使用这些分类）
+# 系统会自动初始化默认分类，此列表仅供参考
 categories:
-  # 支出分类
   expense:
     - 餐饮
     - 交通
     - 购物
     - 娱乐
+    - 居住
     - 医疗
-    - 住房
     - 教育
-    - 其他
-  
-  # 收入分类
+    - 其他支出
   income:
     - 工资
-    - 兼职
+    - 奖金
     - 投资
-    - 礼物
-    - 其他
-
-# 消息文本配置
-messages:
-  welcome: "欢迎使用记账机器人！🎉\n\n使用 /add 记录开支，/balance 查看统计"
-  help: "可用命令：\n/start - 启动\n/add - 记一笔\n/balance - 月度统计\n/history - 历史记录\n/category - 分类管理"
-  add_success: "✅ 记录成功！"
-  add_format: "请按格式输入：金额 分类 备注\n例如：50 餐饮 午餐"
-
-# 日期格式
-date_format: "%Y-%m-%d"
-timezone: "UTC"
+    - 其他收入
