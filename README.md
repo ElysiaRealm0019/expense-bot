@@ -93,6 +93,73 @@ settings:
   timezone: "Europe/London"         # 时区
 ```
 
+### 🐳 Docker 部署
+
+推荐使用 Docker 部署，可以快速启动并确保环境一致性。
+
+#### 前置要求
+
+- [Docker](https://www.docker.com/get-started)
+- [Docker Compose](https://docs.docker.com/compose/install/)
+
+#### 快速部署
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/ElysiaRealm0019/expense-bot.git
+cd expense-bot
+
+# 2. 复制环境配置
+cp .env.example .env
+
+# 3. 编辑 .env 文件，填入你的 Telegram Bot Token
+nano .env
+
+# 4. 一键启动
+./deploy.sh start
+```
+
+#### 部署命令
+
+```bash
+./deploy.sh start    # 启动 Bot
+./deploy.sh restart  # 重启 Bot
+./deploy.sh stop     # 停止 Bot
+./deploy.sh rebuild  # 重新构建镜像
+./deploy.sh logs     # 查看日志
+./deploy.sh status   # 查看状态
+./deploy.sh clean    # 清理所有数据
+```
+
+#### 使用 docker-compose 直接运行
+
+```bash
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env 填入 TELEGRAM_BOT_TOKEN
+
+# 2. 启动
+docker-compose up -d
+
+# 3. 查看日志
+docker-compose logs -f
+```
+
+#### 数据持久化
+
+数据库文件存储在 Docker 命名卷 `expense-data` 中，即使容器删除也不会丢失数据。
+
+查看数据卷:
+```bash
+docker volume ls | grep expense
+```
+
+#### 环境变量
+
+| 变量 | 说明 | 必填 |
+|------|------|------|
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | 是 |
+
 ### 🛠️ 开发
 
 ```bash
