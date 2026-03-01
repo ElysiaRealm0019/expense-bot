@@ -5,18 +5,19 @@
 - 从 YAML 文件加载配置
 - 默认配置
 - 配置项的读取和设置
-- 单例模式
+- 线程安全的单例模式
 """
 
 import os
 import yaml
+import threading
 from typing import Any, Optional
 from pathlib import Path
 
 
 class Config:
     """
-    配置管理类（单例模式）
+    配置管理类（线程安全的单例模式）
 
     使用方法：
         config = Config()
@@ -24,12 +25,14 @@ class Config:
     """
 
     _instance: Optional["Config"] = None
-    _config: Optional[dict] = None
+    _lock = threading.Lock()
 
     def __new__(cls, config_path: str = None):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
         return cls._instance
 
     def __init__(self, config_path: str = None):
