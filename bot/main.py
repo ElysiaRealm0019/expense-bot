@@ -14,7 +14,7 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from telegram.ext import Application
-from handlers import setup_handlers
+from handlers import setup_handlers, setup_pdf_handlers
 
 
 def load_config() -> dict:
@@ -91,6 +91,7 @@ def main():
     
     # Set up handlers
     setup_handlers(application)
+    setup_pdf_handlers(application)
     
     # Start polling
     logging.info("Starting bot...")
