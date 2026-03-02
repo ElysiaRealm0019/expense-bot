@@ -73,14 +73,16 @@ class PDFImportHandler:
         self.parser_type = None  # "ai" or "regex"
         
         # AI 配置 - 支持两种格式
-        # 格式1: ai.pdf_parser.enabled (新格式)
-        # 格式2: ai.enabled (旧格式)
-        ai_config = config.get("ai", {})
+        # 格式1: ai.enabled (顶层格式)
+        # 格式2: ai.pdf_parser.enabled (嵌套格式)
+        ai_config = self.config.get("ai", {})
         if "pdf_parser" in ai_config:
             self.ai_config = ai_config.get("pdf_parser", {})
+            self.ai_enabled = self.ai_config.get("enabled", False)
         else:
-            self.ai_config = ai_config  # 使用顶层 ai 配置
-        self.ai_enabled = self.ai_config.get("enabled", False)
+            # 直接使用顶层 ai 配置
+            self.ai_config = ai_config
+            self.ai_enabled = ai_config.get("enabled", False)
 
     def _check_auth(self, update: Update) -> bool:
         """检查用户权限"""
@@ -208,8 +210,19 @@ class PDFImportHandler:
         try:
             await update.message.reply_text("🤖 正在调用 AI 解析...")
             
-            # 获取 AI 配置
-            ai_config = self.config.get("ai", {}).get("pdf_parser", {})
+            # 获取 AI 配置 - 支持两种格式
+            ai_base = self.config.get("ai", {})
+            
+            # 优先使用顶层 ai 配置，如果没有则尝试 pdf_parser 嵌套
+            if ai_base.get("enabled", False) or ai_base.get("api_key"):
+                # 顶层格式
+                ai_config = ai_base
+            elif "pdf_parser" in ai_base:
+                # 嵌套格式
+                ai_config = ai_base.get("pdf_parser", {})
+            else:
+                ai_config = {}
+            
             provider = ai_config.get("provider", "minimax")
             api_key = ai_config.get("api_key", "")
             model = ai_config.get("model", "")
