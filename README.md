@@ -60,7 +60,52 @@ bot:
 #### 3. 运行 Bot
 
 ```bash
+# 直接运行
 python -m bot.main
+
+# 或使用 CLI (推荐)
+python -m expense_bot.cli --help
+```
+
+### 📖 CLI 命令列表
+
+| 命令 | 说明 |
+|------|------|
+| `python -m expense_bot.cli start` | 启动机器人 (前台) |
+| `python -m expense_bot.cli start --daemon` | 后台运行 |
+| `python -m expense_bot.cli stop` | 停止机器人 |
+| `python -m expense_bot.cli status` | 查看运行状态 |
+| `python -m expense_bot.cli restart` | 重启机器人 |
+| `python -m expense_bot.cli config set token "xxx"` | 设置配置 |
+| `python -m expense_bot.cli config get currency.symbol` | 获取配置 |
+| `python -m expense_bot.cli config list` | 列出所有配置 |
+| `python -m expense_bot.cli systemd install` | 安装 systemd 服务 |
+
+### 后台运行 (nohup)
+
+```bash
+# 后台启动
+python -m expense_bot.cli start --daemon
+
+# 查看日志
+tail -f logs/bot.log
+
+# 停止
+python -m expense_bot.cli stop
+```
+
+### Systemd 服务 (推荐)
+
+```bash
+# 安装 systemd 服务 (需要 sudo)
+sudo python -m expense_bot.cli systemd install
+
+# 管理服务
+sudo systemctl start expense-bot    # 启动
+sudo systemctl stop expense-bot    # 停止
+sudo systemctl restart expense-bot # 重启
+sudo systemctl status expense-bot  # 状态
+sudo journalctl -u expense-bot -f   # 查看日志
 ```
 
 ### 📖 命令列表
