@@ -259,64 +259,6 @@ class PDFImportHandler:
             )
             return ConversationHandler.END
 
-    async def _handle_ai_with_fallback(self, update: Update, pdf_bytes: bytes):
-        """优先使用 AI 解析，失败自动回退到正则"""
-        try:
-            # 先尝试 AI 解析
-            return await self._handle_ai_parse(update, pdf_bytes)
-        except Exception as e:
-            logger.warning(f"AI parsing failed, falling back to regex: {e}")
-            await update.message.reply_text(
-                "🤖 AI 解析未成功，正在自动尝试传统正则解析..."
-            )
-            self.parser_type = "regex"
-            return await self._handle_regex_parse(update, pdf_bytes)
-
-    async def _handle_ai_parse(self, update: Update, pdf_bytes: bytes):
-        """使用 AI 解析 PDF"""
-        try:
-            await update.message.reply_text("🤖 正在调用 AI 解析...")
-            
-            # 获取 AI 配置
-            ai_config = self.config.get("ai", {}).get("pdf_parser", {})
-            provider = ai_config.get("provider", "minimax")
-            api_key = ai_config.get("api_key", "")
-            model = ai_config.get("model", "")
-            base_url = ai_config.get("base_url", "")
-            
-            # 获取分类列表
-            categories = self.db.get_categories()
-            
-            # 创建 AI 解析器
-            parser = create_parser(
-                provider=provider,
-                categories=categories,
-                api_key=api_key,
-                model=model,
-                base_url=base_url
-            )
-            
-            # 解析 PDF
-            transactions_data = parser.parse(bytes(pdf_bytes))
-            
-            if not transactions_data:
-                # AI 未解析出结果，抛出异常触发自动回退
-                raise ValueError("AI returned no transactions")
-            
-            # 转换为统一格式
-            self.pending_transactions = self._convert_ai_transactions(transactions_data)
-            
-            # 显示预览
-            preview_text = self._format_ai_preview(self.pending_transactions)
-            await update.message.reply_text(preview_text, reply_markup=CONFIRM_KEYBOARD)
-            
-            return PDF_PREVIEW
-            
-        except (ValueError, Exception) as e:
-            # AI 解析失败或无结果，抛出异常由上层处理回退
-            logger.warning(f"AI parsing failed: {e}")
-            raise
-
     async def _handle_regex_parse(self, update: Update, pdf_bytes: bytes):
         """使用传统正则解析 PDF"""
         try:
