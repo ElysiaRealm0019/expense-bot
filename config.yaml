@@ -1,6 +1,6 @@
 bot:
   name: expense_bot
-  token: YOUR_BOT_TOKEN_HERE
+  token: 8700564669:AAFh5K5Qk6s3xhlicDVXQ0cTUV-9aAOI-wI
 categories:
   expense:
   - 餐饮
