@@ -85,6 +85,15 @@ def main():
         logging.error("Please configure your bot token in config.yaml!")
         sys.exit(1)
     
+    # 先删除 webhook，确保没有冲突
+    import telegram
+    bot = telegram.Bot(token=token)
+    try:
+        bot.delete_webhook()
+        logging.info("Webhook deleted successfully")
+    except Exception as e:
+        logging.warning(f"Could not delete webhook: {e}")
+    
     # Build application
     application = (
         Application.builder()
