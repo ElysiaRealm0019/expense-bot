@@ -88,7 +88,8 @@ class CommandHandlers:
             "已取消操作～",
             reply_markup=ReplyKeyboardRemove()
         )
-        context.user_data.clear()
+        if context and context.user_data:
+            context.user_data.clear()
         return ConversationHandler.END
 
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,7 +100,8 @@ class CommandHandlers:
                 "😅 出错了，请重试～",
                 reply_markup=ReplyKeyboardRemove()
             )
-        context.user_data.clear()
+        if context and context.user_data:
+            context.user_data.clear()
         return ConversationHandler.END
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
