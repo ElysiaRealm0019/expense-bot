@@ -16,6 +16,29 @@
 - 🔍 查询历史记录
 - 🏷️ 标签支持
 - 💾 数据本地存储 (SQLite)
+- 🤖 **AI 智能分析** (可选)
+
+### 🤖 AI 功能
+
+expense-bot 支持 AI 智能功能，让记账更智能：
+
+#### 功能列表
+
+| 功能 | 说明 |
+|------|------|
+| 智能分类 | AI 自动识别交易类型并分类 |
+| 消费洞察 | 分析消费习惯，提供洞察 |
+| 预算建议 | 根据历史数据给出预算建议 |
+
+#### 支持的 AI 提供商
+
+| 提供商 | 模型示例 | 说明 |
+|--------|----------|------|
+| OpenAI | gpt-4o, gpt-4o-mini | 官方 API |
+| Anthropic | claude-sonnet-4, claude-3-5-sonnet | Claude 系列 |
+| Google | gemini-2.0-flash, gemini-1.5-pro | Gemini 系列 |
+| Ollama | llama3.2, qwen2.5 | 本地部署 |
+| MiniMax | MiniMax-M2.5, MiniMax-M2.1 | 国内模型 |
 
 ### 📁 项目结构
 
@@ -48,7 +71,17 @@ pip install -r requirements.txt
 
 #### 2. 配置 Bot
 
-编辑 `config.yaml`，填入你的 Telegram Bot Token：
+运行交互式配置脚本：
+
+```bash
+./setup.sh
+```
+
+脚本会引导你设置：
+- Telegram Bot Token
+- AI 配置 (可选)
+
+或手动编辑 `config.yaml`：
 
 ```yaml
 bot:
@@ -64,7 +97,93 @@ bot:
 python -m bot.main
 
 # 或使用 CLI (推荐)
-python -m expense_bot.cli --help
+python -m expense_bot.cli start
+```
+
+### 🤖 AI 配置指南
+
+#### 方式一：交互式配置
+
+```bash
+./setup.sh
+```
+
+按提示选择 AI 提供商并输入 API Key。
+
+#### 方式二：手动配置
+
+编辑 `config.yaml`：
+
+```yaml
+ai:
+  enabled: true                    # 启用 AI
+  provider: "openai"               # 提供商
+  model: "gpt-4o-mini"             # 模型
+  api_key: "YOUR_API_KEY_HERE"    # API Key
+  
+  features:
+    smart_categorization: true     # 智能分类
+    spending_insights: true       # 消费洞察
+    budget_advice: true           # 预算建议
+```
+
+#### 各提供商配置示例
+
+**OpenAI:**
+```yaml
+ai:
+  enabled: true
+  provider: "openai"
+  model: "gpt-4o-mini"
+  api_key: "sk-xxx"
+```
+
+**Anthropic:**
+```yaml
+ai:
+  enabled: true
+  provider: "anthropic"
+  model: "claude-sonnet-4-20250514"
+  api_key: "sk-ant-xxx"
+```
+
+**Google:**
+```yaml
+ai:
+  enabled: true
+  provider: "google"
+  model: "gemini-2.0-flash"
+  api_key: "AIzaSyxxx"
+```
+
+**Ollama (本地):**
+```yaml
+ai:
+  enabled: true
+  provider: "ollama"
+  model: "llama3.2"
+  ollama:
+    base_url: "http://localhost:11434"
+```
+
+**MiniMax:**
+```yaml
+ai:
+  enabled: true
+  provider: "minimax"
+  model: "MiniMax-M2.5"
+  api_key: "your-minimax-api-key"
+```
+
+#### 环境变量方式
+
+也可以通过环境变量配置：
+
+```bash
+export TELEGRAM_BOT_TOKEN="xxx"
+export AI_API_KEY="your-api-key"
+export AI_PROVIDER="openai"
+export AI_MODEL="gpt-4o-mini"
 ```
 
 ### 📖 CLI 命令列表
@@ -79,6 +198,7 @@ python -m expense_bot.cli --help
 | `python -m expense_bot.cli config set token "xxx"` | 设置配置 |
 | `python -m expense_bot.cli config get currency.symbol` | 获取配置 |
 | `python -m expense_bot.cli config list` | 列出所有配置 |
+| `python -m expense_bot.cli config set ai.enabled true` | 启用 AI |
 | `python -m expense_bot.cli systemd install` | 安装 systemd 服务 |
 
 ### 后台运行 (nohup)
@@ -118,6 +238,8 @@ sudo journalctl -u expense-bot -f   # 查看日志
 | `/history` | 查看最近的历史记录 |
 | `/category` | 查看可用分类 |
 | `/pdfimport` | 导入 PDF 银行账单 |
+| `/ai` | AI 功能菜单 |
+| `/insights` | 获取 AI 消费洞察 |
 | `/help` | 显示帮助信息 |
 
 ### 📄 PDF 银行账单导入
@@ -169,9 +291,30 @@ sudo journalctl -u expense-bot -f   # 查看日志
 ### ⚙️ 配置说明
 
 ```yaml
+# Bot 配置
 bot:
   token: "YOUR_TELEGRAM_BOT_TOKEN"  # 必填
   name: "expense_bot"               # 可选
+
+# AI 配置
+ai:
+  enabled: false                    # 是否启用 AI 功能
+  provider: "openai"               # 提供商: openai/anthropic/google/ollama/minimax
+  model: "gpt-4o-mini"            # 模型名称
+  api_key: "YOUR_API_KEY"         # API Key
+  base_url: ""                     # 自定义 API 端点 (可选)
+  max_tokens: 1000                 # 最大生成 token 数
+  temperature: 0.7                 # 生成温度 (0-2)
+  
+  features:
+    smart_categorization: true     # 智能分类
+    spending_insights: true        # 消费洞察
+    budget_advice: true            # 预算建议
+    receipt_ocr: false             # 收据 OCR 识别
+  
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3.2"
 
 database:
   path: "data/expenses.db"          # 数据库路径
@@ -183,6 +326,7 @@ currency:
 settings:
   max_history: 50                   # 历史记录上限
   timezone: "Europe/London"         # 时区
+  language: "zh"                    # 语言: zh / en
 ```
 
 ### 🐳 Docker 部署
@@ -251,6 +395,10 @@ docker volume ls | grep expense
 | 变量 | 说明 | 必填 |
 |------|------|------|
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | 是 |
+| `AI_ENABLED` | 启用 AI 功能 | 否 |
+| `AI_PROVIDER` | AI 提供商 | 否 |
+| `AI_API_KEY` | AI API Key | 否 |
+| `AI_MODEL` | AI 模型 | 否 |
 
 ### 🛠️ 开发
 
@@ -295,6 +443,17 @@ A simple Telegram expense tracking bot to help you manage your daily finances.
 - 🔍 Query history
 - 🏷️ Tag support
 - 💾 Local SQLite storage
+- 🤖 **AI-powered analytics** (optional)
+
+### 🤖 AI Features
+
+expense-bot supports AI-powered features to make expense tracking smarter:
+
+| Feature | Description |
+|---------|-------------|
+| Smart Categorization | AI automatically identifies transaction types |
+| Spending Insights | Analyze spending habits |
+| Budget Advice | Get budget suggestions based on history |
 
 ### Quick Start
 
@@ -302,8 +461,10 @@ A simple Telegram expense tracking bot to help you manage your daily finances.
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure bot token in config.yaml
+# Run setup script (recommended)
+./setup.sh
 
+# Or manually configure token in config.yaml
 # Run the bot
 python -m bot.main
 ```
@@ -317,7 +478,19 @@ python -m bot.main
 | `/balance` | View monthly stats |
 | `/history` | View history |
 | `/category` | List categories |
+| `/ai` | AI features menu |
+| `/insights` | Get AI spending insights |
 | `/help` | Show help |
+
+### AI Configuration
+
+```yaml
+ai:
+  enabled: true
+  provider: "openai"  # openai/anthropic/google/ollama/minimax
+  model: "gpt-4o-mini"
+  api_key: "YOUR_API_KEY"
+```
 
 ### License
 
