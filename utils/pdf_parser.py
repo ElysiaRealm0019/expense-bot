@@ -437,17 +437,18 @@ class PDFParser:
         pure_amount_pattern = re.compile(
             r'^'  # 从行首开始
             r'(?:[-–—]\s*)?'  # 可选负号
-            r'(\d{1,3}(?:,\d{3})*(?:\.\d{2}))'  # 金额（必须2位小数）
+            r'(\d{1,3}(?:,\d{3})*(?:\.\d{2}))(?:\s*(?:CR|DR))?'  # 金额（必须2位小数）
             r'$'
         )
         
         # 检查行是否像纯金额（没有字母，除了CR/DR）
-        if pure_amount_pattern.match(text) and not re.search(r'[A-Za-z]', text.replace('CR', '').replace('DR', '')):
+        match = pure_amount_pattern.match(text)
+        if match and not re.search(r'[A-Za-z]', text.replace('CR', '').replace('DR', '').strip()):
             has_dr = 'DR' in text_upper
             has_cr = 'CR' in text_upper
             sign = -1 if (has_explicit_negative or has_dr) else (1 if has_cr else 1)
             try:
-                val = float(text.replace(',', '').replace('-', '').replace('–', '').replace('—', '').strip())
+                val = float(match.group(1).replace(',', ''))
                 # 排除年份大小的数字 (1900-2100 范围可能是年份)
                 if 1900 <= val <= 2100 and '.' not in text:
                     return None
@@ -467,7 +468,7 @@ class PDFParser:
         
         # 只有当行看起来像交易金额时才使用策略3
         # 交易金额行通常：有负号，或有两位小数，或有货币符号
-        if re.search(r'[.-].*\.\d{2}', text) or re.search(r'^[£$€¥]', text):
+        if re.search(r'[.-].*\.\d{2}', text) or re.search(r'[£$€¥]', text):
             match = trailing_amount_pattern.search(text)
             if match:
                 sign = -1 if (has_explicit_negative or 'DR' in text_upper) else (1 if 'CR' in text_upper else 1)
