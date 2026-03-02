@@ -119,10 +119,12 @@ class CommandHandlers:
 • 查看月度/周度统计
 • 分类管理
 • 历史记录查询
+• 📄 PDF 账单导入（支持银行账单自动解析）
 
 💡 快速开始：
 • 输入 /add 添加记录
 • 输入 /balance 查看统计
+• 输入 /pdfimport 导入 PDF 账单
 • 输入 /help 查看帮助
         """
         await update.message.reply_text(welcome_text.strip())
@@ -136,16 +138,18 @@ class CommandHandlers:
         help_text = """
 📖 命令帮助
 
-/ start - 启动机器人
-/ add - 记录支出/收入
-/ balance - 查看本月统计
-/ history - 查看历史记录
-/ category - 查看分类
-/ help - 显示帮助信息
+/start - 启动机器人
+/add - 记录支出/收入
+/balance - 查看本月统计
+/history - 查看历史记录
+/category - 查看分类
+/pdfimport - 导入 PDF 银行账单
+/help - 显示帮助信息
 
 💡 使用技巧：
 • 添加记录时可直接输入金额（如：100）
 • 回复"取消"可终止当前操作
+• /pdfimport 支持自动解析银行 PDF 账单，优先使用 AI 智能解析，失败时自动回退到正则
         """
         await update.message.reply_text(help_text.strip())
 
