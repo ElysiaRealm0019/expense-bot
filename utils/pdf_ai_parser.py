@@ -22,6 +22,8 @@ from datetime import datetime
 from typing import List, Dict, Optional, Any
 from io import BytesIO
 
+import requests
+
 logger = logging.getLogger(__name__)
 
 
@@ -416,32 +418,50 @@ class GoogleAIParser(AIAbstractParser):
         self.base_url = base_url.rstrip("/")
         self._session = requests.Session()
 
-    def parse(self, pdf_text: str) -> List[AITransaction]:
-        """使用 Google Gemini API 解析"""
-        prompt = self._build_prompt(pdf_text)
+    def parse(self, pdf_bytes: bytes) -> List[Dict[str, Any]]:
+        """使用 Google Gemini API 解析 PDF"""
+        # 将 PDF 转为 base64
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+        # 构建提示词
+        prompt = self._get_system_prompt() + "\n\n" + self._get_user_prompt("请解析这个银行 PDF 账单，提取所有交易记录。")
 
         headers = {"Content-Type": "application/json"}
         
-        # Gemini API 格式
+        # Gemini API 格式 - 使用 v1beta 端点
+        # 注意：需要将 PDF 作为 media 文件上传，或使用 inline data
         payload = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "contents": [{
+                "role": "user",
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": "application/pdf",
+                            "data": pdf_base64
+                        }
+                    }
+                ]
+            }],
             "generationConfig": {
-                "maxOutputTokens": 2048,
+                "maxOutputTokens": 8192,
                 "temperature": 0.1,
             }
         }
 
-        url = f"{self.base_url}/models/{self.model}:generateContent"
+        # 正确的 API URL 格式：/v1beta/models/{model}:generateContent
+        url = f"{self.base_url}/v1beta/models/{self.model}:generateContent"
 
         response = self._session.post(
             url,
             headers=headers,
             json=payload,
             params={"key": self.api_key},
-            timeout=60
+            timeout=120
         )
         
         if response.status_code != 200:
+            logger.error(f"Gemini API 错误: {response.status_code} - {response.text}")
             raise RuntimeError(f"Gemini API 错误: {response.status_code} - {response.text}")
 
         result = response.json()
@@ -450,7 +470,31 @@ class GoogleAIParser(AIAbstractParser):
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             return self._extract_json(text)
         except (KeyError, IndexError) as e:
+            logger.error(f"无法解析 Gemini 响应: {e}, response: {result}")
             raise RuntimeError(f"无法解析 Gemini 响应: {e}")
+
+    def _extract_json(self, content: str) -> List[Dict[str, Any]]:
+        """从响应中提取 JSON"""
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            pass
+
+        match = re.search(r'```(?:json)?\s*(\[[\s\S]*?\])\s*```', content)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        match = re.search(r'\[[\s\S]*\]', content)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        raise RuntimeError("无法从响应中提取 JSON 数据")
 
 
 class PDFAIParser:
