@@ -42,3 +42,6 @@ ENV/
 # Logs
 *.log
 data/
+
+# Config (keep config.yaml.example only)
+config.yaml

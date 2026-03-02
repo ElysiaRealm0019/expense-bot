@@ -45,11 +45,14 @@ class Config:
     def _load_config(self, config_path: str = None):
         """加载配置文件"""
         if config_path is None:
-            # 搜索配置文件的路径
+            # 搜索配置文件的路径（优先级从高到低）
             search_paths = [
+                # 1. 用户配置目录（最高优先级，不会被 git 跟踪）
+                os.path.expanduser("~/.config/expense-bot/config.yaml"),
+                # 2. 项目根目录
                 "config.yaml",
+                # 3. 相对路径
                 os.path.join(os.path.dirname(__file__), "..", "..", "config.yaml"),
-                "/home/clawbot/.openclaw/workspace/expense-bot/config.yaml"
             ]
             for path in search_paths:
                 if os.path.exists(path):

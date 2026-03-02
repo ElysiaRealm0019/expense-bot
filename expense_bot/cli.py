@@ -21,7 +21,13 @@ from pathlib import Path
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+
+# 配置文件路径（优先用户配置目录）
+USER_CONFIG = Path.home() / ".config" / "expense-bot" / "config.yaml"
+PROJECT_CONFIG = PROJECT_ROOT / "config.yaml"
+
+# 使用用户配置优先
+CONFIG_PATH = USER_CONFIG if USER_CONFIG.exists() else PROJECT_CONFIG
 
 
 def load_config() -> dict:

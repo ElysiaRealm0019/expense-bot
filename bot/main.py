@@ -19,15 +19,22 @@ from handlers import setup_handlers, setup_pdf_handlers
 
 def load_config() -> dict:
     """Load configuration from config.yaml."""
-    config_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "config.yaml"
-    )
+    # 搜索配置文件路径（优先级从高到低）
+    search_paths = [
+        os.path.expanduser("~/.config/expense-bot/config.yaml"),
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml"),
+    ]
     
-    if not os.path.exists(config_path):
+    config_path = None
+    for path in search_paths:
+        if os.path.exists(path):
+            config_path = path
+            break
+    
+    if not config_path:
         raise FileNotFoundError(
-            f"Configuration file not found: {config_path}\n"
-            "Please create config.yaml from config.yaml.example"
+            f"Configuration file not found!\n"
+            "Please create ~/.config/expense-bot/config.yaml from config.yaml.example"
         )
     
     with open(config_path, "r") as f:
