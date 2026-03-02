@@ -19,9 +19,10 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from io import BytesIO
 
+import fitz  # PyMuPDF
 import requests
 
 logger = logging.getLogger(__name__)
@@ -321,6 +322,203 @@ class MiniMaxParser(AIAbstractParser):
         raise RuntimeError("无法从响应中提取 JSON 数据")
 
 
+# ========== PDF 分块处理函数 ==========
+
+def split_pdf_by_pages(pdf_bytes: bytes, pages_per_chunk: int = 3) -> List[bytes]:
+    """
+    将 PDF 按页数分割成多个块
+    
+    Args:
+        pdf_bytes: PDF 文件字节数据
+        pages_per_chunk: 每块包含的页数（默认 3 页）
+        
+    Returns:
+        PDF 块列表（每个元素是一个 PDF 的字节数据）
+    """
+    chunks = []
+    
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        total_pages = len(doc)
+        
+        for start in range(0, total_pages, pages_per_chunk):
+            end = min(start + pages_per_chunk, total_pages)
+            chunk_doc = fitz.open()
+            for page_num in range(start, end):
+                chunk_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+            chunks.append(chunk_doc.tobytes())
+            chunk_doc.close()
+        
+        doc.close()
+        logger.info(f"Split PDF into {len(chunks)} chunks ({pages_per_chunk} pages each)")
+        
+    except Exception as e:
+        logger.error(f"Failed to split PDF: {e}")
+        raise RuntimeError(f"PDF 分块失败: {e}")
+    
+    return chunks
+
+
+def get_pdf_page_count(pdf_bytes: bytes) -> int:
+    """
+    获取 PDF 页数
+    
+    Args:
+        pdf_bytes: PDF 文件字节数据
+        
+    Returns:
+        PDF 页数
+    """
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        count = len(doc)
+        doc.close()
+        return count
+    except Exception as e:
+        logger.error(f"Failed to get PDF page count: {e}")
+        return 0
+
+
+def merge_transaction_results(results: List[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """
+    合并多个 PDF 块的解析结果
+    
+    处理步骤：
+    1. 合并所有交易
+    2. 按日期和金额去重
+    3. 按日期排序
+    
+    Args:
+        results: 解析结果列表（每个元素是一个块的交易列表）
+        
+    Returns:
+        合并去重后的交易列表
+    """
+    all_transactions = []
+    
+    # 1. 合并所有交易
+    for chunk_result in results:
+        all_transactions.extend(chunk_result)
+    
+    logger.info(f"Total transactions before dedup: {len(all_transactions)}")
+    
+    # 2. 去重 - 基于日期、金额和描述的相似度
+    seen = set()
+    unique_transactions = []
+    
+    for tx in all_transactions:
+        # 创建唯一键：日期_金额（取整到分）+ 描述前20字符
+        date = tx.get('date', '')
+        amount = tx.get('amount', 0)
+        amount_key = round(amount, 2)  # 精确到分
+        desc = tx.get('description', '')[:20].lower().strip()
+        
+        # 清理描述中的特殊字符
+        desc = re.sub(r'[^a-z0-9]', '', desc)
+        
+        key = f"{date}_{amount_key}_{desc}"
+        
+        if key not in seen:
+            seen.add(key)
+            unique_transactions.append(tx)
+    
+    logger.info(f"Transactions after dedup: {len(unique_transactions)}")
+    
+    # 3. 按日期排序
+    def sort_key(tx):
+        date_str = tx.get('date', '')
+        try:
+            return datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return datetime.min
+    
+    unique_transactions.sort(key=sort_key)
+    
+    return unique_transactions
+
+
+def parse_pdf_with_chunking(
+    pdf_bytes: bytes,
+    provider: str = "openai",
+    api_key: str = "",
+    model: str = "",
+    categories: Optional[List[Dict]] = None,
+    pages_per_chunk: int = 3,
+    max_chunks: int = 10,
+) -> List[Dict[str, Any]]:
+    """
+    使用分块方式解析大型 PDF（避免 AI 超时）
+    
+    Args:
+        pdf_bytes: PDF 文件字节数据
+        provider: API 提供商 ("openai", "minimax", "google")
+        api_key: API 密钥
+        model: 模型名称
+        categories: 分类列表
+        pages_per_chunk: 每块包含的页数（默认 3 页）
+        max_chunks: 最大分块数量（默认 10，防止无限分割）
+        
+    Returns:
+        交易记录列表
+    """
+    # 获取 PDF 页数
+    page_count = get_pdf_page_count(pdf_bytes)
+    logger.info(f"PDF has {page_count} pages")
+    
+    # 如果页数小于等于 pages_per_chunk，直接解析
+    if page_count <= pages_per_chunk:
+        logger.info("PDF is small, parsing directly")
+        return parse_pdf_with_ai(
+            pdf_bytes=pdf_bytes,
+            provider=provider,
+            api_key=api_key,
+            model=model,
+            categories=categories
+        )
+    
+    # 计算需要的分块数
+    num_chunks = (page_count + pages_per_chunk - 1) // pages_per_chunk
+    
+    if num_chunks > max_chunks:
+        # 如果分块太多，减少每块页数
+        pages_per_chunk = (page_count + max_chunks - 1) // max_chunks
+        num_chunks = (page_count + pages_per_chunk - 1) // pages_per_chunk
+        logger.info(f"Adjusted pages_per_chunk to {pages_per_chunk} to fit max_chunks limit")
+    
+    # 分割 PDF
+    chunks = split_pdf_by_pages(pdf_bytes, pages_per_chunk)
+    logger.info(f"Split into {len(chunks)} chunks")
+    
+    # 创建解析器
+    parser = create_parser(
+        provider=provider,
+        api_key=api_key,
+        model=model,
+        categories=categories
+    )
+    
+    # 逐块解析
+    results = []
+    for i, chunk in enumerate(chunks):
+        logger.info(f"Parsing chunk {i+1}/{len(chunks)}")
+        try:
+            chunk_result = parser.parse(chunk)
+            results.append(chunk_result)
+            logger.info(f"Chunk {i+1}: extracted {len(chunk_result)} transactions")
+        except Exception as e:
+            logger.error(f"Failed to parse chunk {i+1}: {e}")
+            # 继续处理其他块
+            results.append([])
+    
+    # 合并结果
+    merged = merge_transaction_results(results)
+    logger.info(f"Final result: {len(merged)} transactions")
+    
+    return merged
+
+
+
+
 def create_parser(
     provider: str = "openai",
     categories: Optional[List[Dict]] = None,
@@ -375,20 +573,43 @@ def parse_pdf_with_ai(
     api_key: str = "",
     model: str = "",
     categories: Optional[List[Dict]] = None,
+    use_chunking: bool = True,
+    chunk_pages: int = 3,
+    max_chunks: int = 10,
 ) -> List[Dict[str, Any]]:
     """
     使用 AI 解析 PDF 账单
 
     Args:
         pdf_bytes: PDF 文件字节数据
-        provider: API 提供商 ("openai" 或 "minimax")
+        provider: API 提供商 ("openai", "minimax", "google")
         api_key: API 密钥
         model: 模型名称
         categories: 分类列表
+        use_chunking: 是否使用分块处理（默认 True，大 PDF 自动分块）
+        chunk_pages: 每块的页数（默认 3）
+        max_chunks: 最大分块数（默认 10）
 
     Returns:
         交易记录列表
     """
+    # 自动检测是否需要分块
+    if use_chunking:
+        page_count = get_pdf_page_count(pdf_bytes)
+        # 如果页数大于 chunk_pages 或超过 5 页，建议使用分块
+        if page_count > chunk_pages or page_count > 5:
+            logger.info(f"Using chunking for PDF with {page_count} pages")
+            return parse_pdf_with_chunking(
+                pdf_bytes=pdf_bytes,
+                provider=provider,
+                api_key=api_key,
+                model=model,
+                categories=categories,
+                pages_per_chunk=chunk_pages,
+                max_chunks=max_chunks,
+            )
+    
+    # 小 PDF 直接解析
     parser = create_parser(
         provider=provider,
         api_key=api_key,
@@ -597,6 +818,7 @@ class PDFAIParser:
     AI 解析器（兼容旧接口）
     
     使用配置中的 AI 设置来解析 PDF
+    支持分块处理大型 PDF
     """
     
     def __init__(self, config: dict):
@@ -610,6 +832,11 @@ class PDFAIParser:
         self.provider = self.ai_config.get("provider", "openai")
         self.model = self.ai_config.get("model", "")
         
+        # 分块处理配置
+        self.use_chunking = self.ai_config.get("use_chunking", True)
+        self.chunk_pages = self.ai_config.get("chunk_pages", 3)
+        self.max_chunks = self.ai_config.get("max_chunks", 10)
+        
         # 获取分类
         from core.database import Database
         db_path = config.get("database.path", "data/expenses.db")
@@ -617,13 +844,16 @@ class PDFAIParser:
         self.categories = db.get_categories()
     
     def parse_pdf_bytes(self, pdf_bytes: bytes) -> List[AITransaction]:
-        """解析 PDF，返回交易列表"""
+        """解析 PDF，返回交易列表（支持分块）"""
         raw_transactions = parse_pdf_with_ai(
             pdf_bytes=pdf_bytes,
             provider=self.provider,
             api_key=self.api_key,
             model=self.model,
-            categories=self.categories
+            categories=self.categories,
+            use_chunking=self.use_chunking,
+            chunk_pages=self.chunk_pages,
+            max_chunks=self.max_chunks,
         )
         
         # 转换为 AITransaction 对象
