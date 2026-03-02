@@ -76,6 +76,7 @@ class UserAuthMixin:
 
 def main():
     """Main function to run the bot."""
+    import asyncio
     setup_logging()
     config = load_config()
     
@@ -85,15 +86,6 @@ def main():
         logging.error("Please configure your bot token in config.yaml!")
         sys.exit(1)
     
-    # 先删除 webhook，确保没有冲突
-    import telegram
-    bot = telegram.Bot(token=token)
-    try:
-        bot.delete_webhook()
-        logging.info("Webhook deleted successfully")
-    except Exception as e:
-        logging.warning(f"Could not delete webhook: {e}")
-    
     # Build application
     application = (
         Application.builder()
@@ -101,6 +93,28 @@ def main():
         .post_init(post_init)
         .build()
     )
+    
+    # 先初始化 application，然后用异步方式清理 webhook
+    async def init_and_cleanup():
+        await application.initialize()
+        try:
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            logging.info("Webhook deleted successfully")
+        except Exception as e:
+            logging.warning(f"Could not delete webhook: {e}")
+    
+    asyncio.run(init_and_cleanup())
+    
+    # Store config for auth check
+    application.bot_data["config"] = config
+    
+    # Set up handlers
+    setup_handlers(application)
+    setup_pdf_handlers(application)
+    
+    # Start polling
+    logging.info("Starting bot...")
+    application.run_polling(allowed_updates=["message", "edited_message"])
     
     # Store config for auth check
     application.bot_data["config"] = config
