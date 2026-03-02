@@ -230,6 +230,8 @@ def cmd_systemd(args):
     
     service_name = "expense-bot"
     service_file = f"/etc/systemd/system/{service_name}.service"
+    # 项目实际路径
+    project_path = PROJECT_ROOT.resolve()
     
     if args.systemd_action == "install":
         # 检查是否有root权限
@@ -244,13 +246,14 @@ After=network.target
 
 [Service]
 Type=simple
-User={os.getenv('USER', 'clawbot')}
-WorkingDirectory={PROJECT_ROOT}
+User=clawbot
+WorkingDirectory={project_path}
+Environment="PYTHONPATH={project_path}"
 ExecStart={sys.executable} -m bot.main
 Restart=always
 RestartSec=10
-StandardOutput=append:{PROJECT_ROOT}/logs/bot.log
-StandardError=append:{PROJECT_ROOT}/logs/bot.log
+StandardOutput=append:{project_path}/logs/bot.log
+StandardError=append:{project_path}/logs/bot.log
 
 [Install]
 WantedBy=multi-user.target
