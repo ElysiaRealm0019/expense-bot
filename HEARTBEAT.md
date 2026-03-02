@@ -13,12 +13,12 @@ curl -s "wttr.in/Bournemouth?format=%C+%t+%h+%w"
 - 温度、体感温度、湿度、风速
 - 预报：最高/最低温
 
-### 2. Google 日历 (reonhazel@gmail.com)
+### 2. Google 日历 (多日历汇总)
 ```bash
-# 检查主日历 + My BU Calendar (课程日历)
-gog calendar events "ohlcotcpbnvarnssn5cftluue1c4osbh@import.calendar.google.com" --account reonhazel@gmail.com --today
+# 获取所有日历的事件（--all 获取所有日历，--days 3 获取未来3天）
+gog calendar events --all --days 3 --plain
 ```
-- 今日日程安排（含 BU 课程）
+- 自动汇总所有 Google 账号的所有日历事件
 
 ### 3. 新闻摘要 (Exa)
 ```bash
@@ -28,7 +28,7 @@ mcporter call 'exa.web_search_exa(query: "major news today", numResults: 5)'
 
 ### 4. 费用报告 (所有模型)
 ```bash
-# 获取昨日费用（MiniMax £5/月 + Gemini 实际消耗）
+# 调用费用估算脚本
 python3 ~/.openclaw/skills/gemini-cost-tracker/scripts/extract-cost.py --yesterday
 ```
 - MiniMax: £5/月固定（无限量）
@@ -98,6 +98,7 @@ python3 ~/.openclaw/skills/gemini-cost-tracker/scripts/extract-cost.py --yesterd
 ### 重要邮件监控
 - **Cron ID**: hourly-email-check
 - **时间**: 0 * * * * (每小时)
-- **内容**: 检查三个 Gmail 账号的未读重要邮件
+- **内容**: 检查所有 Gmail 账号的未读重要邮件
+- **脚本**: `scripts/check-important-emails-gog.py` (gog CLI)
 - **关键词**: 学校、包裹、快递、银行卡、银行账单、成绩、考试、会议、预约
 - **仅在发现重要邮件时发送通知**
