@@ -449,7 +449,7 @@ class GoogleAIParser(AIAbstractParser):
             }
         }
 
-        # 正确的 API URL 格式：/v1beta/models/{model}:generateContent
+        # API URL 格式
         url = f"{self.base_url}/v1beta/models/{self.model}:generateContent"
 
         response = self._session.post(
@@ -466,12 +466,28 @@ class GoogleAIParser(AIAbstractParser):
 
         result = response.json()
         
+        # 调试：打印完整响应
+        logger.info(f"Gemini 响应: {result}")
+        
+        # 尝试多种响应格式
         try:
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            return self._extract_json(text)
-        except (KeyError, IndexError) as e:
-            logger.error(f"无法解析 Gemini 响应: {e}, response: {result}")
-            raise RuntimeError(f"无法解析 Gemini 响应: {e}")
+            # 格式1: candidates[0].content.parts[0].text
+            if "candidates" in result and result["candidates"]:
+                text = result["candidates"][0]["content"]["parts"][0]["text"]
+                return self._extract_json(text)
+        except (KeyError, IndexError, TypeError):
+            pass
+        
+        try:
+            # 格式2: promptFeedback (可能是blocked)
+            if "promptFeedback" in result:
+                raise RuntimeError(f"内容被阻止: {result.get('promptFeedback', {})}")
+        except (KeyError, IndexError, TypeError):
+            pass
+        
+        # 如果都失败，抛出详细错误
+        logger.error(f"无法解析 Gemini 响应格式: {result}")
+        raise RuntimeError(f"无法从响应中提取 JSON 数据: {result}")
 
     def _extract_json(self, content: str) -> List[Dict[str, Any]]:
         """从响应中提取 JSON"""
