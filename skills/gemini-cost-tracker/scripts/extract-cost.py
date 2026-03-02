@@ -32,10 +32,6 @@ PRICING = {
         "note": "Actual costs from API",
         "models": ["gemini-1.0", "gemini-1.5", "gemini-2.0", "gemini-2.5", "gemini-3.0"]
     },
-    "openrouter": {
-        "currency": "USD", 
-        "note": "Actual costs from API"
-    }
 }
 
 # Models that use fixed monthly pricing
