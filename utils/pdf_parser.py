@@ -67,6 +67,26 @@ class PDFParser:
     NEGATIVE_INDICATORS = ['-', 'DR', 'debit', 'paid to', 'payment to']
     POSITIVE_INDICATORS = ['+', 'CR', 'credit', 'deposit', 'received', 'refund', 'salary', 'wage', 'pay']
 
+
+    # 非交易行过滤模式（用于排除标题、汇总等）
+    NON_TRANSACTION_PATTERNS = [
+        # 日期范围 "01/12/2025 - 28/02/2026"
+        re.compile(r'\d{1,2}[/-]\d{1,2}[/-]\d{4}\s*-\s*\d{1,2}[/-]\d{1,2}[/-]\d{4}'),
+        # 账户标题 "Personal Account statement", "Personal Account balance"
+        re.compile(r'^Personal\s+Account', re.IGNORECASE),
+        # 表格列标题
+        re.compile(r'^Date\s+Description', re.IGNORECASE),
+        re.compile(r'^Description.*\(GBP\)', re.IGNORECASE),
+        # 汇总行关键词
+        re.compile(r'^(Total outgoings|Total deposits|Balance in Pots|Account number|Sort code|IBAN|BIC|Monzo Bank|Excluding all Pots)', re.IGNORECASE),
+        # 纯金额行（没有描述，只有 £ 符号和金额，通常是余额）
+        re.compile(r'^£\s*\d{1,3}(,\d{3})*(\.\d{2})?\s*$'),
+        # 仅国家代码行 (GBR, CHN 等)
+        re.compile(r'^(GBR|CHF|USD|EUR|CNY|JPY|AUD|CAD|HKD|SGD)$'),
+        # 空行或只有空白
+        re.compile(r'^\s*$'),
+    ]
+
     # 分类关键词映射
     CATEGORY_KEYWORDS = {
         # 餐饮
@@ -197,43 +217,147 @@ class PDFParser:
         """
         从文本中提取交易记录
         
-        策略：
-        1. 按行分割文本
-        2. 每行尝试匹配日期和金额
-        3. 根据金额符号和关键词判断类型
-        4. 自动匹配分类
+        策略（针对 Monzo 等多行列格式优化）：
+        1. 检测表格标题来定位交易区域
+        2. 识别日期行并提取后续行的金额
+        3. 过滤非交易行（标题、汇总、日期范围等）
+        4. 去重处理（更严格的去重规则）
         """
         transactions = []
+        seen_keys = set()  # 用于去重
+        
         lines = text.split('\n')
         
-        for line in lines:
-            line = line.strip()
-            if not line or len(line) < 5:
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # 跳过空行
+            if not line:
+                i += 1
                 continue
             
-            # 尝试提取日期和金额
-            result = self._parse_line(line)
-            if result:
-                date, amount, desc = result
+            # 检查是否匹配非交易行模式
+            if self._is_non_transaction_line(line):
+                i += 1
+                continue
+            
+            # 尝试提取日期
+            date = self._extract_date(line)
+            if not date:
+                i += 1
+                continue
+            
+            # 尝试在同一行或后续行中提取金额
+            amount = None
+            description_parts = [line]
+            
+            # 在当前行及后续几行寻找金额
+            for look_ahead in range(5):
+                if i + look_ahead >= len(lines):
+                    break
+                check_line = lines[i + look_ahead].strip()
                 
-                # 判断类型
-                tx_type = self._detect_type(amount, desc)
+                if not check_line:
+                    continue
                 
-                # 标准化金额（取绝对值用于存储）
-                abs_amount = abs(amount)
+                # 如果是日期行，继续
+                if self._extract_date(check_line) and look_ahead > 0:
+                    break
                 
-                # 自动匹配分类
-                category = self._match_category(desc, tx_type)
+                # 跳过非交易行
+                if self._is_non_transaction_line(check_line):
+                    continue
                 
-                transactions.append(ParsedTransaction(
-                    date=date,
-                    amount=abs_amount,
-                    description=desc,
-                    type=tx_type,
-                    category=category
-                ))
+                # 尝试提取金额
+                potential_amount = self._extract_amount(check_line)
+                if potential_amount is not None:
+                    # 过滤太小的金额（可能是余额）
+                    if abs(potential_amount) < 0.50 and potential_amount != 0:
+                        i += 1
+                        continue
+                    
+                    amount = potential_amount
+                    # 收集金额前的所有行作为描述
+                    for j in range(look_ahead):
+                        desc_line = lines[i + j].strip()
+                        if desc_line and not self._extract_date(desc_line):
+                            description_parts.append(desc_line)
+                    i += look_ahead
+                    break
+            
+            if amount is None:
+                i += 1
+                continue
+            
+            # 构建描述
+            desc = ' '.join([p for p in description_parts if p])
+            for pattern, _ in self.DATE_PATTERNS:
+                desc = pattern.sub('', desc)
+            desc = re.sub(r'\s+', ' ', desc).strip()
+            
+            amount_clean_pattern = re.compile(r'[-–—]?\s*(?:£|\$|€|¥)?\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?(?:\s*CR|\s*DR)?')
+            desc = amount_clean_pattern.sub('', desc)
+            desc = desc.strip()
+            
+            if len(desc) < 2:
+                i += 1
+                continue
+            
+            # 判断类型
+            tx_type = self._detect_type(amount, desc)
+            
+            # 标准化金额
+            abs_amount = abs(amount)
+            
+            # 严格的去重检查 - 基于日期和金额
+            # 金额相近（相差小于0.01）且日期相同的视为重复
+            found_duplicate = False
+            date_str = date.strftime('%Y-%m-%d')
+            for existing in transactions:
+                existing_date_str = existing.date.strftime('%Y-%m-%d')
+                if existing_date_str == date_str and abs(existing.amount - abs_amount) < 0.01:
+                    # 如果已有交易，跳过这个
+                    found_duplicate = True
+                    break
+            
+            if found_duplicate:
+                i += 1
+                continue
+            
+            # 分类
+            category = self._match_category(desc, tx_type)
+            
+            transactions.append(ParsedTransaction(
+                date=date,
+                amount=abs_amount,
+                description=desc,
+                type=tx_type,
+                category=category
+            ))
+            
+            i += 1
         
         return transactions
+    
+    def _is_non_transaction_line(self, line: str) -> bool:
+        """检查是否是非交易行（标题、汇总、日期范围等）"""
+        line = line.strip()
+        if not line:
+            return True
+        
+        for pattern in self.NON_TRANSACTION_PATTERNS:
+            if pattern.match(line):
+                return True
+        
+        # 检查是否包含非交易关键词
+        line_lower = line.lower()
+        for keyword in ['balance', 'total outgoings', 'total deposits', 'statement', 
+                       'account number', 'sort code', 'iban', 'bic', 'registered']:
+            if keyword in line_lower and not self._extract_date(line):
+                return True
+        
+        return False
 
     def _parse_line(self, line: str) -> Optional[Tuple[datetime, float, str]]:
         """
@@ -276,65 +400,87 @@ class PDFParser:
         return None
 
     def _extract_amount(self, text: str) -> Optional[float]:
-        """从文本中提取金额"""
-        # 改进的金额提取策略：
-        # 1. 首先检查是否有明确的负号标记
-        # 2. 然后找金额模式
-        
-        text_upper = text.upper()
-        is_negative = any(marker in text for marker in ['-', '–', '—']) or 'DR' in text_upper
-        
-        # 更精确的金额正则：支持 £$€¥ 货币符号，支持千分位，支持小数点
-        # 匹配格式：£1,234.56, -50.00, 100.50, 100 CR 等
-        amount_pattern = re.compile(
-            r'(?:[-–—]\s*)?'  # 可选负号
-            r'(?:£|\$|€|¥)\s*'  # 可选货币符号（后面可能有空格）
-            r'(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'  # 主金额
-            r'(?:\s*CR|\s*DR)?'  # 可选 CR/DR 后缀
-        )
-        
-        # 备选：没有货币符号的金额
-        simple_amount_pattern = re.compile(
-            r'(?:[-–—]\s*)?'  # 可选负号
-            r'(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'  # 主金额
-            r'(?:\s*CR|\s*DR)?'  # 可选 CR/DR 后缀
-        )
-        
-        amounts = []
-        
-        # 先尝试带货币符号的模式
-        matches = amount_pattern.findall(text)
-        for match in matches:
-            try:
-                val = float(match.replace(',', ''))
-                amounts.append(val)
-            except ValueError:
-                continue
-        
-        # 如果没有匹配到，尝试简单模式
-        if not amounts:
-            matches = simple_amount_pattern.findall(text)
-            for match in matches:
-                try:
-                    val = float(match.replace(',', ''))
-                    amounts.append(val)
-                except ValueError:
-                    continue
-        
-        if not amounts:
+        """从文本中提取金额（更严格的策略）"""
+        text = text.strip()
+        if not text:
             return None
+            
+        text_upper = text.upper()
         
-        # 返回最大的金额
-        amount = max(amounts)
+        # 检查是否有明确的负号在金额前面
+        has_explicit_negative = text.startswith('-') or text.startswith('–') or text.startswith('—')
         
-        # 如果有负号标记或 DR，取负值
-        if is_negative or 'DR' in text_upper:
-            amount = -abs(amount)
-        # 如果有 CR 标记，保持正数
-        elif 'CR' in text_upper:
-            amount = abs(amount)
+        # 策略1：优先匹配带货币符号的金额（最可靠）
+        # 匹配格式：£1,234.56, -50.00, $100.50, €100 等
+        currency_amount_pattern = re.compile(
+            r'^'  # 从行首开始
+            r'(?:[-–—]\s*)?'  # 可选负号
+            r'(£|\$|€|¥)'  # 必须有货币符号
+            r'\s*'  # 可选空格
+            r'(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)'  # 主金额
+            r'(?:\s*CR|\s*DR)?'  # 可选 CR/DR 后缀
+            r'$'
+        )
         
-        return amount
+        match = currency_amount_pattern.match(text)
+        if match:
+            sign = -1 if (has_explicit_negative or 'DR' in text_upper) else 1
+            try:
+                val = float(match.group(2).replace(',', ''))
+                return sign * val
+            except ValueError:
+                pass
+        
+        # 策略2：纯金额行（只有金额，没有其他文字）
+        # 匹配格式：-30.00, 100.50, 1,234.56 等
+        # 排除看起来像日期的数字（如 20/02/2026 里的 2026）
+        pure_amount_pattern = re.compile(
+            r'^'  # 从行首开始
+            r'(?:[-–—]\s*)?'  # 可选负号
+            r'(\d{1,3}(?:,\d{3})*(?:\.\d{2}))'  # 金额（必须2位小数）
+            r'$'
+        )
+        
+        # 检查行是否像纯金额（没有字母，除了CR/DR）
+        if pure_amount_pattern.match(text) and not re.search(r'[A-Za-z]', text.replace('CR', '').replace('DR', '')):
+            has_dr = 'DR' in text_upper
+            has_cr = 'CR' in text_upper
+            sign = -1 if (has_explicit_negative or has_dr) else (1 if has_cr else 1)
+            try:
+                val = float(text.replace(',', '').replace('-', '').replace('–', '').replace('—', '').strip())
+                # 排除年份大小的数字 (1900-2100 范围可能是年份)
+                if 1900 <= val <= 2100 and '.' not in text:
+                    return None
+                return sign * val
+            except ValueError:
+                pass
+        
+        # 策略3：行尾的金额（有货币符号或明确的金额特征）
+        # 需要更严格的判断
+        trailing_amount_pattern = re.compile(
+            r'(?:[-–—]\s*)?'  # 可选负号
+            r'(?:£|\$|€|¥)?\s*'  # 可选货币符号
+            r'(\d{1,3}(?:,\d{3})*\.\d{2})'  # 金额（必须2位小数）
+            r'(?:\s*CR|\s*DR)?'  # 可选 CR/DR
+            r'$'
+        )
+        
+        # 只有当行看起来像交易金额时才使用策略3
+        # 交易金额行通常：有负号，或有两位小数，或有货币符号
+        if re.search(r'[.-].*\.\d{2}', text) or re.search(r'^[£$€¥]', text):
+            match = trailing_amount_pattern.search(text)
+            if match:
+                sign = -1 if (has_explicit_negative or 'DR' in text_upper) else (1 if 'CR' in text_upper else 1)
+                try:
+                    val = float(match.group(1).replace(',', ''))
+                    # 排除年份大小的数字
+                    if 1900 <= val <= 2100:
+                        return None
+                    return sign * val
+                except ValueError:
+                    pass
+        
+        return None
 
     def _extract_description(self, line: str, date: datetime, amount: float) -> str:
         """提取交易描述"""
