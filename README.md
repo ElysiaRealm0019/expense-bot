@@ -40,6 +40,42 @@ expense-bot 支持 AI 智能功能，让记账更智能：
 | Ollama | llama3.2, qwen2.5 | 本地部署 |
 | MiniMax | MiniMax-M2.5, MiniMax-M2.1 | 国内模型 |
 
+### 🔗 OpenClaw 协作
+
+expense-bot 可以与 **OpenClaw** 个人 AI 助手无缝协作！
+
+#### 协作功能
+
+| 功能 | 说明 |
+|------|------|
+| 📊 财务分析 | OpenClaw 可直接查询数据库，提供详细财务报告 |
+| 📄 PDF 导入 | 将银行账单发送给 OpenClaw，AI 自动解析导入 |
+| 💡 智能建议 | 根据消费数据提供个性化理财建议 |
+| 📈 趋势分析 | 分析趋势 |
+
+#### 月度/年度支出联动示例
+
+```
+用户: 帮我分析这个月的支出
+OpenClaw: 📊 2月支出 £1,015 | 收入 £1,111
+         - 餐饮超预算 30%
+         - 建议减少外卖次数
+
+用户: (发送 PDF 账单)
+OpenClaw: 📄 检测到银行账单，正在解析...
+         ✅ 解析到 50 笔交易，已导入数据库
+```
+
+#### 数据共享
+
+OpenClaw 可直接读取本地 SQLite 数据库 (`data/expenses.db`)：
+- 读取交易记录
+- 生成统计报告
+- 分析消费习惯
+- 提供预算建议
+
+
+
 ### 📁 项目结构
 
 ```
@@ -424,6 +460,45 @@ pytest
 - **DailySummary** - 日/周/月汇总
 - **CategoryStat** - 分类统计
 - **TrendData** - 趋势数据
+
+
+
+---
+
+### 🔗 OpenClaw Collaboration
+
+expense-bot can seamlessly collaborate with **OpenClaw** your personal AI assistant!
+
+#### Collaboration Features
+
+| Feature | Description |
+|---------|-------------|
+| 📊 Financial Analysis | OpenClaw can query the database directly for detailed reports |
+| 📄 PDF Import | Send bank statements to OpenClaw, AI auto-parses and imports |
+| 💡 Smart Suggestions | Personalized financial advice based on spending data |
+| 📈 Trend Analysis | Analyze spending trends |
+
+#### Collaboration Example
+
+```
+User: Analyze this month's expenses
+OpenClaw: 📊 Feb expenses £1,015 | Income £1,111
+         - Dining over budget by 30%
+         - Suggest reducing takeout
+
+User: (sends PDF statement)
+OpenClaw: 📄 Bank statement detected, parsing...
+         ✅ Parsed 50 transactions, imported to database
+```
+
+#### Data Sharing
+
+OpenClaw can directly read the local SQLite database (`data/expenses.db`):
+- Read transaction records
+- Generate statistical reports
+- Analyze spending habits
+- Provide budget advice
+
 
 ### 📄 许可证
 
