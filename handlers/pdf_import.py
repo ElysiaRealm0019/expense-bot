@@ -72,8 +72,14 @@ class PDFImportHandler:
         # 存储解析器类型
         self.parser_type = None  # "ai" or "regex"
         
-        # AI 配置
-        self.ai_config = config.get("ai", {}).get("pdf_parser", {})
+        # AI 配置 - 支持两种格式
+        # 格式1: ai.pdf_parser.enabled (新格式)
+        # 格式2: ai.enabled (旧格式)
+        ai_config = config.get("ai", {})
+        if "pdf_parser" in ai_config:
+            self.ai_config = ai_config.get("pdf_parser", {})
+        else:
+            self.ai_config = ai_config  # 使用顶层 ai 配置
         self.ai_enabled = self.ai_config.get("enabled", False)
 
     def _check_auth(self, update: Update) -> bool:

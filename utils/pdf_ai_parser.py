@@ -337,6 +337,13 @@ def create_parser(
             model=model or "abab6.5s-chat",
             base_url=base_url or "https://api.minimax.chat/v1"
         )
+    elif provider in ["google", "gemini"]:
+        return GoogleAIParser(
+            categories=categories,
+            api_key=api_key,
+            model=model or "gemini-2.0-flash",
+            base_url=base_url or "https://generativelanguage.googleapis.com"
+        )
     else:
         raise ValueError(f"不支持的 API 提供商: {provider}")
 
@@ -391,6 +398,59 @@ class AITransaction:
         self.type = type
         self.category = category
         self.confidence = confidence
+
+
+class GoogleAIParser(AIAbstractParser):
+    """Google Gemini API 解析器"""
+
+    def __init__(
+        self,
+        categories: Optional[List[Dict]] = None,
+        api_key: str = "",
+        model: str = "gemini-2.0-flash",
+        base_url: str = "https://generativelanguage.googleapis.com",
+    ):
+        self.categories = categories or []
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self._session = requests.Session()
+
+    def parse(self, pdf_text: str) -> List[AITransaction]:
+        """使用 Google Gemini API 解析"""
+        prompt = self._build_prompt(pdf_text)
+
+        headers = {"Content-Type": "application/json"}
+        
+        # Gemini API 格式
+        payload = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": 2048,
+                "temperature": 0.1,
+            }
+        }
+
+        url = f"{self.base_url}/models/{self.model}:generateContent"
+
+        response = self._session.post(
+            url,
+            headers=headers,
+            json=payload,
+            params={"key": self.api_key},
+            timeout=60
+        )
+        
+        if response.status_code != 200:
+            raise RuntimeError(f"Gemini API 错误: {response.status_code} - {response.text}")
+
+        result = response.json()
+        
+        try:
+            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            return self._extract_json(text)
+        except (KeyError, IndexError) as e:
+            raise RuntimeError(f"无法解析 Gemini 响应: {e}")
 
 
 class PDFAIParser:
