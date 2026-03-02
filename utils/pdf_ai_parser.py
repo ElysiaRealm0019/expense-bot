@@ -190,7 +190,16 @@ class OpenAIParser(AIAbstractParser):
                 pass
 
         # 尝试找到 JSON 数组
-        match = re.search(r'\[[\s\S]*\]', content)
+        match = re.search(r'(\[[\s\S]*)', content)
+        if match:
+            json_str = match.group(1)
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                # 尝试修复截断的 JSON
+                fixed = self._extract_partial_json(json_str)
+                if fixed:
+                    return fixed
         if match:
             try:
                 return json.loads(match.group(0))
@@ -293,7 +302,16 @@ class MiniMaxParser(AIAbstractParser):
             except json.JSONDecodeError:
                 pass
 
-        match = re.search(r'\[[\s\S]*\]', content)
+        match = re.search(r'(\[[\s\S]*)', content)
+        if match:
+            json_str = match.group(1)
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                # 尝试修复截断的 JSON
+                fixed = self._extract_partial_json(json_str)
+                if fixed:
+                    return fixed
         if match:
             try:
                 return json.loads(match.group(0))
@@ -343,7 +361,7 @@ def create_parser(
         return GoogleAIParser(
             categories=categories,
             api_key=api_key,
-            model=model or "gemini-2.0-flash",
+            model=model or "gemini-2.5-flash",
             base_url=base_url or "https://generativelanguage.googleapis.com"
         )
     else:
@@ -409,7 +427,7 @@ class GoogleAIParser(AIAbstractParser):
         self,
         categories: Optional[List[Dict]] = None,
         api_key: str = "",
-        model: str = "gemini-2.0-flash",
+        model: str = "gemini-2.5-flash",
         base_url: str = "https://generativelanguage.googleapis.com",
     ):
         self.categories = categories or []
@@ -444,7 +462,7 @@ class GoogleAIParser(AIAbstractParser):
                 ]
             }],
             "generationConfig": {
-                "maxOutputTokens": 8192,
+                "maxOutputTokens": 32768,
                 "temperature": 0.1,
             }
         }
@@ -503,7 +521,16 @@ class GoogleAIParser(AIAbstractParser):
             except json.JSONDecodeError:
                 pass
 
-        match = re.search(r'\[[\s\S]*\]', content)
+        match = re.search(r'(\[[\s\S]*)', content)
+        if match:
+            json_str = match.group(1)
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                # 尝试修复截断的 JSON
+                fixed = self._extract_partial_json(json_str)
+                if fixed:
+                    return fixed
         if match:
             try:
                 return json.loads(match.group(0))
@@ -511,6 +538,58 @@ class GoogleAIParser(AIAbstractParser):
                 pass
 
         raise RuntimeError("无法从响应中提取 JSON 数据")
+
+    def _extract_partial_json(self, json_str: str) -> List[Dict[str, Any]]:
+        """从可能被截断的 JSON 内容中提取尽可能多的完整对象"""
+        import logging
+        
+        objects = []
+        
+        # 找到数组开始
+        array_start = json_str.find('[')
+        if array_start != -1:
+            json_str = json_str[array_start:]
+        
+        # 添加缺失的 ]
+        if json_str.count('[') > json_str.count(']'):
+            json_str += ']'
+        
+        # 直接尝试解析
+        try:
+            result = json.loads(json_str)
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict):
+                return [result]
+        except json.JSONDecodeError:
+            pass
+        
+        # 尝试分割成对象并逐个解析
+        parts = json_str.split('}')
+        
+        for part in parts[:-1]:  # 跳过最后一个（可能被截断）
+            if not part.strip().startswith('{'):
+                continue
+            part += '}'
+            try:
+                obj = json.loads(part)
+                objects.append(obj)
+            except json.JSONDecodeError:
+                # 尝试修复：移除最后一个逗号后的内容
+                last_comma = part.rfind(',')
+                if last_comma != -1:
+                    fixed = part[:last_comma] + '}'
+                    try:
+                        obj = json.loads(fixed)
+                        objects.append(obj)
+                    except:
+                        pass
+        
+        if objects:
+            logging.getLogger(__name__).info(f"从截断的响应中提取了 {len(objects)} 条交易记录")
+            return objects
+        
+        return None
 
 
 class PDFAIParser:
