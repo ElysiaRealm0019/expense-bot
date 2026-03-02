@@ -38,10 +38,19 @@ logger = logging.getLogger(__name__)
 
 # Conversation states
 (
+    PDF_CHOOSE_MODE,  # 新增：选择解析模式
     PDF_WAITING,
     PDF_PREVIEW,
     PDF_CONFIRM,
-) = range(100, 103)
+) = range(100, 104)
+
+# 解析模式选择键盘（简化版按钮文字）
+MODE_KEYBOARD = ReplyKeyboardMarkup(
+    [["🤖 AI智能解析", "📝 传统正则解析"]],
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
+
 CONFIRM_KEYBOARD = ReplyKeyboardMarkup(
     [["✅ 确认导入", "❌ 取消"]],
     resize_keyboard=True,
@@ -81,16 +90,9 @@ class PDFImportHandler:
             await update.message.reply_text("⛔ 您没有权限使用此机器人。")
             return ConversationHandler.END
         
-        # 优先使用 AI（如果启用），失败后自动回退到正则
-        if self.ai_enabled:
-            await update.message.reply_text(
-                "📄 PDF 账单导入\n\n"
-                "请发送您的银行 PDF 账单文件～\n\n"
-                "🤖 将优先使用 AI 智能解析（支持复杂格式、图片型账单）\n"
-                "如果 AI 解析失败，将自动尝试传统正则解析",
-                reply_markup=ReplyKeyboardRemove()
-            )
-        else:
+        # 检查 AI 是否启用
+        if not self.ai_enabled:
+            # AI 未启用，直接使用正则模式
             await update.message.reply_text(
                 "📄 PDF 账单导入\n\n"
                 "请发送您的银行 PDF 账单文件，我将自动解析交易记录～\n\n"
@@ -101,9 +103,24 @@ class PDFImportHandler:
                 "• 自动匹配分类",
                 reply_markup=ReplyKeyboardRemove()
             )
+            self.parser_type = "regex"
+            return PDF_WAITING
         
-        self.parser_type = "ai" if self.ai_enabled else "regex"
-        return PDF_WAITING
+        # AI 已启用，让用户选择解析模式
+        await update.message.reply_text(
+            "📄 PDF 账单导入\n\n"
+            "请选择解析方式：\n\n"
+            "🤖 AI 智能解析\n"
+            "   • 支持复杂格式、图片型账单\n"
+            "   • 智能识别交易类型和分类\n"
+            "   • 如失败将返回错误\n\n"
+            "📝 传统正则解析\n"
+            "   • 速度快，成功率高\n"
+            "   • 适用于标准格式账单",
+            reply_markup=MODE_KEYBOARD
+        )
+        
+        return PDF_CHOOSE_MODE
 
     async def handle_pdf(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理接收到的 PDF 文件"""
@@ -130,9 +147,9 @@ class PDFImportHandler:
             # 读取为字节
             pdf_bytes = await file.download_as_bytearray()
             
-            # 优先使用 AI，失败则自动回退到正则
-            if self.ai_enabled:
-                return await self._handle_ai_with_fallback(update, pdf_bytes)
+            # 根据选择的模式解析
+            if self.parser_type == "ai":
+                return await self._handle_ai_only(update, pdf_bytes)
             else:
                 return await self._handle_regex_parse(update, pdf_bytes)
             
@@ -141,6 +158,104 @@ class PDFImportHandler:
             await update.message.reply_text(
                 f"😅 处理 PDF 时出错：{str(e)}\n"
                 "请重试或尝试其他文件。"
+            )
+            return ConversationHandler.END
+
+    async def handle_mode_choose(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """处理用户选择解析模式"""
+        text = update.message.text.strip()
+        
+        if "AI" in text:
+            # 用户选择 AI 解析
+            self.parser_type = "ai"
+            await update.message.reply_text(
+                "🤖 您选择了 AI 智能解析\n\n"
+                "请发送您的银行 PDF 账单文件～\n\n"
+                "💡 提示：AI 解析支持复杂格式和图片型账单",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return PDF_WAITING
+        elif "正则" in text or "传统" in text:
+            # 用户选择正则解析
+            self.parser_type = "regex"
+            await update.message.reply_text(
+                "📝 您选择了传统正则解析\n\n"
+                "请发送您的银行 PDF 账单文件～\n\n"
+                "支持的格式：\n"
+                "• 日期格式：DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD 等\n"
+                "• 金额格式：£1,234.56, -50.00, 100CR 等",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return PDF_WAITING
+        else:
+            # 无效选择，提示重新选择
+            await update.message.reply_text(
+                "😅 请点击按钮选择解析方式：\n\n"
+                "🤖 使用 AI 智能解析\n"
+                "📝 使用传统正则解析",
+                reply_markup=MODE_KEYBOARD
+            )
+            return PDF_CHOOSE_MODE
+
+    async def _handle_ai_only(self, update: Update, pdf_bytes: bytes):
+        """只使用 AI 解析，失败返回错误（不自动回退）"""
+        try:
+            await update.message.reply_text("🤖 正在调用 AI 解析...")
+            
+            # 获取 AI 配置
+            ai_config = self.config.get("ai", {}).get("pdf_parser", {})
+            provider = ai_config.get("provider", "minimax")
+            api_key = ai_config.get("api_key", "")
+            model = ai_config.get("model", "")
+            base_url = ai_config.get("base_url", "")
+            
+            # 检查 API 配置
+            if not api_key:
+                await update.message.reply_text(
+                    "😅 AI 解析未配置 API Key，无法使用。\n"
+                    "请选择使用传统正则解析。"
+                )
+                return ConversationHandler.END
+            
+            # 获取分类列表
+            categories = self.db.get_categories()
+            
+            # 创建 AI 解析器
+            parser = create_parser(
+                provider=provider,
+                categories=categories,
+                api_key=api_key,
+                model=model,
+                base_url=base_url
+            )
+            
+            # 解析 PDF
+            transactions_data = parser.parse(bytes(pdf_bytes))
+            
+            if not transactions_data:
+                await update.message.reply_text(
+                    "😕 AI 未能从 PDF 中解析出交易记录。\n\n"
+                    "可能原因：\n"
+                    "• PDF 内容无法识别\n"
+                    "• 账单格式过于复杂\n\n"
+                    "请尝试使用传统正则解析（发送 /pdfimport 重新选择）。"
+                )
+                return ConversationHandler.END
+            
+            # 转换为统一格式
+            self.pending_transactions = self._convert_ai_transactions(transactions_data)
+            
+            # 显示预览
+            preview_text = self._format_ai_preview(self.pending_transactions)
+            await update.message.reply_text(preview_text, reply_markup=CONFIRM_KEYBOARD)
+            
+            return PDF_PREVIEW
+            
+        except Exception as e:
+            logger.error(f"AI parsing failed: {e}")
+            await update.message.reply_text(
+                f"😅 AI 解析失败：{str(e)}\n\n"
+                "请选择使用传统正则解析（发送 /pdfimport 重新选择）。"
             )
             return ConversationHandler.END
 
@@ -507,6 +622,9 @@ def setup_pdf_handlers(application: Application):
     pdf_conv = ConversationHandler(
         entry_points=[CommandHandler("pdfimport", handler.pdf_import_command)],
         states={
+            PDF_CHOOSE_MODE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handler.handle_mode_choose)
+            ],
             PDF_WAITING: [
                 MessageHandler(filters.Document.PDF, handler.handle_pdf)
             ],
